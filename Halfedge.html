@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Halfedge</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+    </style>
+    <script>
+        function Clamp(value, min, max) {
+            return Math.min(Math.max(value, min), max);
+        }
+
+        function Rgb(r, g, b) {
+            return `rgb(${ r }, ${ g }, ${ b })`
+        }
+
+        function Rad(deg) {
+            return deg * (Math.PI / 180);
+        }
+
+        function Dist(vec1, vec2) {
+            return vec1.Sub(vec2).Length()
+        }
+
+        class Vec2 {
+            constructor(x = 0, y = 0) {
+                this.x = x
+                this.y = y
+            }
+
+            Add(vec) {
+                return new Vec2(this.x + vec.x, this.y + vec.y)
+            }
+
+            Sub(vec) {
+                return new Vec2(this.x - vec.x, this.y - vec.y)
+            }
+
+            Length() {
+                return Math.sqrt(this.x * this.x + this.y * this.y)
+            }
+
+            Normalize() {
+                const l = this.Length()
+
+                return new Vec2(this.x / l, this.y / l)
+            }
+
+            MultScalar(scalar) {
+                return new Vec2(this.x * scalar, this.y * scalar)
+            }
+
+            DivScalar(scalar) {
+                return new Vec2(this.x / scalar, this.y / scalar)
+            }
+        }
+
+        function PerpendicularNormal(a, b) {
+            const d = a.Sub(b)
+
+            return new Vec2(-d.y, d.x).Normalize()
+        }
+
+        function DirectionNormal(a, b) {
+            const d = b.Sub(a)
+
+            return d.Normalize()
+        }
+
+        class Renderer {
+            constructor(canvas) {
+                this.canvas = canvas
+                this.d2 = canvas.getContext('2d')
+            }
+
+            ClearColor(color) {
+                this.d2.rect(0, 0, this.canvas.width, this.canvas.height)
+
+                this.Fill(color)
+            }
+
+            MoveTo(position) {
+                this.d2.moveTo(position.x, position.y)
+            }
+
+            LineTo(position) {
+                this.d2.lineTo(position.x, position.y)
+            }
+
+            RenderPolygon(polygon) {
+                this.d2.beginPath()
+
+                const points = polygon.points
+                const point0 = points[0]
+
+                this.MoveTo(point0)
+
+                for (let i = 1; i < points.length; i++) {
+                    const point = points[i]
+
+                    this.LineTo(point)
+                }
+
+                this.d2.closePath()
+            }
+
+            RenderLine(pointA, pointB) {
+                this.d2.beginPath()
+
+                this.MoveTo(pointA)
+                this.LineTo(pointB)
+
+                this.d2.closePath()
+            }
+
+            RenderArrowHead(pointA, pointB) {
+                const dn = DirectionNormal(pointA, pointB)
+                const pn = PerpendicularNormal(pointA, pointB)
+
+                this.d2.beginPath()
+                this.MoveTo(pointB)
+                this.LineTo(pointB.Add(dn.MultScalar(-10)).Add(pn.MultScalar(5)))
+                this.LineTo(pointB.Add(dn.MultScalar(-10)).Sub(pn.MultScalar(5)))
+                this.d2.closePath()
+            }
+
+            DrawArrow(pointA, pointB, color, width) {
+                this.RenderLine(pointA, pointB)
+                this.Stroke(color, width)
+                this.RenderArrowHead(pointA, pointB)
+                this.Fill(color)
+            }
+
+            RenderAabb(min, max) {
+                this.d2.beginPath()
+
+                const size = max.Sub(min)
+                this.d2.rect(min.x, min.y, size.x, size.y)
+
+                this.d2.closePath()
+            }
+
+            RenderCircle(position, radius) {
+                this.d2.beginPath();
+                this.d2.arc(position.x, position.y, radius, 0, 2 * Math.PI);
+                this.d2.closePath()
+            }
+
+            Fill(color) {
+                this.d2.fillStyle = color
+                this.d2.fill()
+            }
+
+            Stroke(color, width) {
+                this.d2.strokeStyle = color
+                this.d2.lineWidth = width
+                this.d2.stroke()
+            }
+
+            Transform(camera) {
+                this.d2.resetTransform()
+                this.d2.translate(this.canvas.width / 2, this.canvas.height / 2)
+                this.d2.scale(camera.zoom , -camera.zoom)
+                this.d2.translate(-camera.x, camera.y)
+                this.transform = this.d2.getTransform()
+            }
+
+            ToWorldSpace(position) {
+                const rect = this.canvas.getBoundingClientRect()
+                const scaleX = this.canvas.width / rect.width
+                const scaleY = this.canvas.height / rect.height
+                const x = (position.x - rect.left) * scaleX
+                const y = (position.y - rect.top) * scaleY
+                const matrix = DOMMatrix.fromMatrix(this.transform).invertSelf()
+
+                return new Vec2(x * matrix.a + y * matrix.c + matrix.e, x * matrix.b + y * matrix.d + matrix.f)
+            }
+        }
+
+        class Camera {
+            constructor(position = new Vec2(0, 0), zoom = 1) {
+                this.position = position
+                this.zoom = zoom
+            }
+        }
+    </script>
+    <script>
+        class Vertex {
+            constructor(position, halfedge = null) {
+                this.position = position
+                this.halfedge = halfedge
+            }
+        }
+
+        class Halfedge {
+            vertex = null
+            twin = null
+            next = null
+        }
+
+        class Mesh {
+            vertices = []
+            halfedges = []
+
+            AddVertex(position) {
+                const vertex = new Vertex(position)
+                vertex.id = this.vertices.length
+                this.vertices.push(vertex)
+
+                return vertex
+            }
+
+            JoinVertices(vertexA, vertexB) {
+                const halfedge = new Halfedge()
+                const halfedgeTwin = new Halfedge()
+
+                halfedge.vertex = vertexA
+
+                if (!vertexA.halfedge) {
+                    vertexA.halfedge = halfedge
+                }
+
+                halfedgeTwin.vertex = vertexB
+
+                if (!vertexB.halfedge) {
+                    vertexB.halfedge = halfedgeTwin
+                }
+
+                halfedge.twin = halfedgeTwin
+                halfedgeTwin.twin = halfedge
+
+                halfedgeTwin.next = vertexA.halfedge
+                vertexA.halfedge.twin.next = halfedge
+
+                this.halfedges.push(halfedge)
+                this.halfedges.push(halfedgeTwin)
+
+                return halfedge
+            }
+        }
+    </script>
+</head>
+<body>
+    <script>
+        const canvas = document.createElement('canvas')
+        canvas.width = window.innerWidth
+        canvas.height = window.innerHeight
+        document.body.append(canvas)
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth
+            canvas.height = window.innerHeight
+        })
+
+        const renderer = new Renderer(canvas)
+        const camera = new Camera()
+        const mesh = new Mesh()
+        let lastVertex = null
+        let startHalfedge = null
+        let mouse = new Vec2()
+        let activeHalfedge = null
+
+        function SelectedVertex() {
+            for (const vertex of mesh.vertices) {
+                renderer.RenderCircle(vertex.position, 5)
+
+                if (Dist(mouse, vertex.position) < 20) {
+                    return vertex
+                }
+            }
+
+            return null
+        }
+
+        window.addEventListener('mousemove', e => {
+            mouse = renderer.ToWorldSpace(new Vec2(e.clientX, e.clientY))
+        })
+
+        window.addEventListener('mousedown', e => {
+            if (e.button != 0) {
+                return;
+            }
+
+            if (!lastVertex) {
+                lastVertex = mesh.AddVertex(mouse)
+            } else {
+                const newVertex = SelectedVertex() ??  mesh.AddVertex(mouse)
+                const halfedge = mesh.JoinVertices(lastVertex, newVertex)
+                lastVertex = newVertex
+
+                if (!startHalfedge) {
+                    startHalfedge = halfedge
+                    activeHalfedge = halfedge
+                }
+            }
+        })
+
+        function Render() {
+            renderer.ClearColor(Rgb(255, 255, 255))
+            renderer.Transform(camera)
+
+            if (startHalfedge) {
+                let h = startHalfedge
+
+                do {
+                    const vertex = h.vertex
+                    const twinVertex = h.twin.vertex
+                    const p0 = vertex.position
+                    const p1 = twinVertex.position
+                    const pn = PerpendicularNormal(p0, p1).MultScalar(5)
+                    const dn = DirectionNormal(p0, p1).MultScalar(10)
+                    const isActive = h == activeHalfedge
+                    const c1 = isActive ? Rgb(255, 191, 0) : Rgb(209, 15, 73)
+                    const c2 = isActive ? Rgb(255, 191, 0) : Rgb(66, 95, 227)
+
+                    renderer.DrawArrow(p0.Add(dn).Add(pn), p1.Sub(dn).Add(pn), c1, 2)
+                    renderer.DrawArrow(p1.Sub(dn).Sub(pn), p0.Add(dn).Sub(pn), c2, 2)
+                    h = h.next
+                } while (h && h != startHalfedge)
+            }
+
+            for (const vertex of mesh.vertices) {
+                renderer.RenderCircle(vertex.position, 5)
+
+                if (Dist(mouse, vertex.position) < 20) {
+                    renderer.Fill(Rgb(176, 255, 107))
+                } else {
+                    renderer.Fill(Rgb(29, 117, 44))
+                }
+            }
+
+            requestAnimationFrame(Render)
+        }
+
+        Render()
+
+        window.setInterval(() => {
+            if (activeHalfedge) {
+                activeHalfedge = activeHalfedge.next
+
+                if (!activeHalfedge) {
+                    activeHalfedge = startHalfedge
+                }
+            }
+        }, 500)
+
+    </script>
+</body>
+</html>
