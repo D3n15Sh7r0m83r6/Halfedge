@@ -166,7 +166,7 @@
                 this.d2.fillStyle = color
                 this.d2.scale(1, -1)
                 this.d2.translate(position.x, -position.y)
-                this.d2.fillText(text, 0, 6)
+                this.d2.fillText(text, 0, 5)
                 this.d2.translate(-position.x, position.y)
                 this.d2.scale(1, -1)
             }
@@ -237,6 +237,10 @@
             }
 
             AddFace(indices) {
+                if (indices.length < 3) {
+                    return null
+                }
+
                 const halfedges = []
 
                 for (let i = 0; i < indices.length; ++i) {
@@ -309,7 +313,7 @@
 
         const renderer = new Renderer(canvas)
         const camera = new Camera()
-        const mesh = new Mesh()
+        let mesh = new Mesh()
 
         // const v0 = mesh.AddVertex(new Vec2(-100, 200))
         // const v1 = mesh.AddVertex(new Vec2(100, 200))
@@ -393,6 +397,10 @@
             if (e.code == 'KeyF') {
                 mesh.AddFace(selectedVertices)
                 selectedVertices = []
+            }
+
+            if (e.code == 'KeyC') {
+                mesh = new Mesh()
             }
         })
 
