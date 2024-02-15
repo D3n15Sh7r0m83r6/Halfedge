@@ -80,6 +80,7 @@
             }
 
             ClearColor(color) {
+                this.d2.resetTransform()
                 this.d2.rect(0, 0, this.canvas.width, this.canvas.height)
 
                 this.Fill(color)
@@ -119,22 +120,18 @@
                 this.d2.closePath()
             }
 
-            RenderArrowHead(pointA, pointB) {
+            RenderArrow(pointA, pointB) {
                 const dn = DirectionNormal(pointA, pointB)
                 const pn = PerpendicularNormal(pointA, pointB)
 
                 this.d2.beginPath()
-                this.MoveTo(pointB)
-                this.LineTo(pointB.Add(dn.MultScalar(-10)).Add(pn.MultScalar(5)))
-                this.LineTo(pointB.Add(dn.MultScalar(-10)).Sub(pn.MultScalar(5)))
-                this.d2.closePath()
-            }
 
-            DrawArrow(pointA, pointB, color, width) {
-                this.RenderLine(pointA, pointB)
-                this.Stroke(color, width)
-                this.RenderArrowHead(pointA, pointB)
-                this.Fill(color)
+                this.MoveTo(pointA)
+                this.LineTo(pointB)
+                this.LineTo(pointB.Add(dn.MultScalar(-6)).Add(pn.MultScalar(-3)))
+                this.LineTo(pointB.Add(dn.MultScalar(-6)))
+
+                this.d2.closePath()
             }
 
             RenderAabb(min, max) {
@@ -161,6 +158,17 @@
                 this.d2.strokeStyle = color
                 this.d2.lineWidth = width
                 this.d2.stroke()
+            }
+
+            FillText(text, position, color) {
+                this.d2.font = '16px monospace, monospace'
+                this.d2.textAlign = 'center'
+                this.d2.fillStyle = color
+                this.d2.scale(1, -1)
+                this.d2.translate(position.x, -position.y)
+                this.d2.fillText(text, 0, 6)
+                this.d2.translate(-position.x, position.y)
+                this.d2.scale(1, -1)
             }
 
             Transform(camera) {
@@ -202,11 +210,23 @@
             vertex = null
             twin = null
             next = null
+            prev = null
+        }
+
+        class Edge {
+            halfedge = null
+        }
+
+        class Face {
+            halfedge = null
         }
 
         class Mesh {
             vertices = []
-            halfedges = []
+            edges = []
+            faces = []
+            halfedges = {}
+            halfedgeCount = 0
 
             AddVertex(position) {
                 const vertex = new Vertex(position)
@@ -216,32 +236,61 @@
                 return vertex
             }
 
-            JoinVertices(vertexA, vertexB) {
-                const halfedge = new Halfedge()
-                const halfedgeTwin = new Halfedge()
+            AddFace(indices) {
+                const halfedges = []
 
-                halfedge.vertex = vertexA
+                for (let i = 0; i < indices.length; ++i) {
+                    const indexA = indices[i]
+                    const indexB = indices[(i + 1) % indices.length]
+                    const vertexA = this.vertices[indexA]
+                    const vertexB = this.vertices[indexB]
 
-                if (!vertexA.halfedge) {
-                    vertexA.halfedge = halfedge
+                    const halfedge = new Halfedge()
+                    halfedge.id = this.halfedgeCount + i
+
+                    halfedge.vertex = vertexA
+
+                    if (!vertexA.halfedge) {
+                        vertexA.halfedge = halfedge
+                    }
+
+                    const twin = this.halfedges[vertexB.id + 'x' + vertexA.id]
+
+                    if (twin) {
+                        halfedge.twin = twin
+                        twin.twin = halfedge
+                    }
+
+                    halfedges.push(halfedge)
+                    this.halfedgeCount++;
                 }
 
-                halfedgeTwin.vertex = vertexB
+                for (let i = 0; i < halfedges.length; ++i) {
+                    const halfedgeA = halfedges[i]
+                    const halfedgeB = halfedges[(i + 1) % halfedges.length]
 
-                if (!vertexB.halfedge) {
-                    vertexB.halfedge = halfedgeTwin
+                    this.halfedges[halfedgeA.vertex.id + 'x' +  halfedgeB.vertex.id] = halfedgeA
+                    this.halfedges[halfedgeB.vertex.id + 'x' + halfedgeA.vertex.id] = halfedgeB
+
+                    halfedgeA.next = halfedgeB
+                    halfedgeB.prev = halfedgeA
                 }
 
-                halfedge.twin = halfedgeTwin
-                halfedgeTwin.twin = halfedge
+                const face = new Face()
+                face.halfedge = halfedges[0]
+                this.faces.push(face)
 
-                halfedgeTwin.next = vertexA.halfedge
-                vertexA.halfedge.twin.next = halfedge
+                return face
+            }
 
-                this.halfedges.push(halfedge)
-                this.halfedges.push(halfedgeTwin)
+            Debug(halfedge) {
+                let he = halfedge
 
-                return halfedge
+                do {
+                    console.log(he)
+
+                    he = he.next
+                } while (he && he != halfedge)
             }
         }
     </script>
@@ -261,10 +310,68 @@
         const renderer = new Renderer(canvas)
         const camera = new Camera()
         const mesh = new Mesh()
-        let lastVertex = null
-        let startHalfedge = null
+
+        // const v0 = mesh.AddVertex(new Vec2(-100, 200))
+        // const v1 = mesh.AddVertex(new Vec2(100, 200))
+        // const v2 = mesh.AddVertex(new Vec2(-200, 0))
+        // const v3 = mesh.AddVertex(new Vec2(0, 0))
+        // const v4 = mesh.AddVertex(new Vec2(200, 0))
+        // const v5 = mesh.AddVertex(new Vec2(-100, -200))
+        // const v6 = mesh.AddVertex(new Vec2(100, -200))
+
+        // const halfedges = [
+        //     mesh.AddFace([0, 2, 3]),
+        //     mesh.AddFace([0, 3, 1]),
+        //     mesh.AddFace([1, 3, 4]),
+        //     mesh.AddFace([2, 5, 3]),
+        //     mesh.AddFace([3, 5, 6]),
+        //     mesh.AddFace([3, 6, 4])
+        // ]
+
+        // const v0 = mesh.AddVertex(new Vec2(-200, 200))
+        // const v1 = mesh.AddVertex(new Vec2(200, 200))
+        // const v2 = mesh.AddVertex(new Vec2(-200, -200))
+        // const v3 = mesh.AddVertex(new Vec2(200, -200))
+
+        // const halfedges = [
+        //     mesh.AddFace([0, 2, 3]),
+        //     mesh.AddFace([0, 3, 1])
+        // ]
+
+        const v0 = mesh.AddVertex(new Vec2(-200, 200))
+        const v1 = mesh.AddVertex(new Vec2(200, 200))
+
+        const v2 = mesh.AddVertex(new Vec2(-100, 100))
+        const v3 = mesh.AddVertex(new Vec2(100, 100))
+        const v4 = mesh.AddVertex(new Vec2(-100, -100))
+        const v5 = mesh.AddVertex(new Vec2(100, -100))
+
+        const v6 = mesh.AddVertex(new Vec2(-200, -200))
+        const v7 = mesh.AddVertex(new Vec2(200, -200))
+
+        const halfedges = [
+            mesh.AddFace([0, 2, 1]),
+            mesh.AddFace([1, 2, 3]),
+            mesh.AddFace([0, 6, 2]),
+            mesh.AddFace([2, 6, 4]),
+            mesh.AddFace([4, 6, 5]),
+            mesh.AddFace([5, 6, 7]),
+            mesh.AddFace([1, 3, 5]),
+            mesh.AddFace([1, 5, 7]),
+        ]
+
         let mouse = new Vec2()
-        let activeHalfedge = null
+        let selectedVertex = null
+        let selectedVertices = []
+        let isMoving = false
+
+        window.addEventListener('mousemove', e => {
+            mouse = renderer.ToWorldSpace(new Vec2(e.clientX, e.clientY))
+
+            if (selectedVertex && isMoving) {
+                selectedVertex.position = mouse
+            }
+        })
 
         function SelectedVertex() {
             for (const vertex of mesh.vertices) {
@@ -278,26 +385,34 @@
             return null
         }
 
-        window.addEventListener('mousemove', e => {
-            mouse = renderer.ToWorldSpace(new Vec2(e.clientX, e.clientY))
+        window.addEventListener('keydown', e => {
+            if (e.code == 'KeyE') {
+                mesh.AddVertex(mouse)
+            }
+
+            if (e.code == 'KeyF') {
+                mesh.AddFace(selectedVertices)
+                selectedVertices = []
+            }
         })
 
         window.addEventListener('mousedown', e => {
-            if (e.button != 0) {
-                return;
-            }
+            if (e.button == 0) {
+                selectedVertex =  SelectedVertex()
 
-            if (!lastVertex) {
-                lastVertex = mesh.AddVertex(mouse)
-            } else {
-                const newVertex = SelectedVertex() ??  mesh.AddVertex(mouse)
-                const halfedge = mesh.JoinVertices(lastVertex, newVertex)
-                lastVertex = newVertex
-
-                if (!startHalfedge) {
-                    startHalfedge = halfedge
-                    activeHalfedge = halfedge
+                if (selectedVertex) {
+                    isMoving = true
+                    selectedVertices.push(selectedVertex.id)
+                } else {
+                    selectedVertex = null
+                    selectedVertices = []
                 }
+            }
+        })
+
+        window.addEventListener('mouseup', e => {
+            if (e.button == 0) {
+                isMoving = false
             }
         })
 
@@ -305,50 +420,51 @@
             renderer.ClearColor(Rgb(255, 255, 255))
             renderer.Transform(camera)
 
-            if (startHalfedge) {
-                let h = startHalfedge
-
-                do {
-                    const vertex = h.vertex
-                    const twinVertex = h.twin.vertex
-                    const p0 = vertex.position
-                    const p1 = twinVertex.position
-                    const pn = PerpendicularNormal(p0, p1).MultScalar(5)
-                    const dn = DirectionNormal(p0, p1).MultScalar(10)
-                    const isActive = h == activeHalfedge
-                    const c1 = isActive ? Rgb(255, 191, 0) : Rgb(209, 15, 73)
-                    const c2 = isActive ? Rgb(255, 191, 0) : Rgb(66, 95, 227)
-
-                    renderer.DrawArrow(p0.Add(dn).Add(pn), p1.Sub(dn).Add(pn), c1, 2)
-                    renderer.DrawArrow(p1.Sub(dn).Sub(pn), p0.Add(dn).Sub(pn), c2, 2)
-                    h = h.next
-                } while (h && h != startHalfedge)
-            }
-
             for (const vertex of mesh.vertices) {
-                renderer.RenderCircle(vertex.position, 5)
+                let color = [11, 22, 64]
 
                 if (Dist(mouse, vertex.position) < 20) {
-                    renderer.Fill(Rgb(176, 255, 107))
-                } else {
-                    renderer.Fill(Rgb(29, 117, 44))
+                    color = [191, 206, 245]
                 }
+
+                if (selectedVertices.indexOf(vertex.id) > -1) {
+                    color = [67, 181, 158]
+                }
+
+                let textColor = [255 - color[0], 255 - color[1], 255 - color[2]]
+
+                renderer.RenderCircle(vertex.position, 10)
+                renderer.Fill(Rgb(...color))
+                renderer.FillText(vertex.id, vertex.position, Rgb(...textColor))
+            }
+
+            for (const face of mesh.faces) {
+                let he = face.halfedge
+
+                do {
+                    const p0 = he.vertex.position
+                    const p1 = he.next.vertex.position
+                    const dn = DirectionNormal(p0, p1).MultScalar(20)
+                    const pn = PerpendicularNormal(p0, p1).MultScalar(3)
+                    const pn2 = PerpendicularNormal(p0, p1).MultScalar(20)
+
+                    renderer.RenderArrow(p0.Add(dn).Sub(pn), p1.Sub(dn).Sub(pn))
+                    renderer.Stroke(Rgb(66, 135, 245), 2)
+                    renderer.FillText(he.id, p0.Add(p1).DivScalar(2).Sub(pn2), Rgb(66, 135, 256))
+
+                    if (!he.twin) {
+                        renderer.RenderArrow(p1.Sub(dn).Add(pn), p0.Add(dn).Add(pn))
+                        renderer.Stroke(Rgb(184, 17, 81), 2)
+                    }
+
+                    he = he.next
+                } while (he && he != face.halfedge)
             }
 
             requestAnimationFrame(Render)
         }
 
         Render()
-
-        window.setInterval(() => {
-            if (activeHalfedge) {
-                activeHalfedge = activeHalfedge.next
-
-                if (!activeHalfedge) {
-                    activeHalfedge = startHalfedge
-                }
-            }
-        }, 500)
 
     </script>
 </body>
