@@ -228,6 +228,10 @@
             halfedges = {}
             halfedgeCount = 0
 
+            Hash(vertexA, vertexB) {
+                return vertexA.id + '-' + vertexB.id
+            }
+
             AddVertex(position) {
                 const vertex = new Vertex(position)
                 vertex.id = this.vertices.length
@@ -238,7 +242,48 @@
 
             AddFace(indices) {
                 if (indices.length < 3) {
+                    console.log('Less than 3 vertices')
+
                     return null
+                }
+
+                const vertices = []
+
+                for (const index of indices) {
+                    const vertex = this.vertices[index]
+
+                    if (!vertex) {
+                        console.log(`Undefined vertex: ${ index }`)
+
+                        return null
+                    }
+
+                    if (vertices.indexOf(vertex) > -1) {
+                        console.log(`Duplicate vertex: ${ index }`)
+
+                        return null
+                    }
+
+                    vertices.push(vertex)
+                }
+
+                for (let i = 0; i < vertices.length; ++i) {
+                    const vertexA = vertices[i]
+                    const vertexB = vertices[(i + 1) % vertices.length]
+                    const existingHalfedgeA = this.halfedges[this.Hash(vertexA, vertexB)]
+                    const existingHalfedgeB = this.halfedges[this.Hash(vertexB, vertexA)]
+
+                    if (existingHalfedgeA && !existingHalfedgeA.isOutside) {
+                        console.log(`Duplicate halfedge: ${ existingHalfedgeA.id }`)
+
+                        return null
+                    }
+
+                    if (existingHalfedgeB && existingHalfedgeB.isOutside) {
+                        console.log(`Duplicate halfedge: ${ existingHalfedgeB.id }`)
+
+                        return null
+                    }
                 }
 
                 const halfedges = []
@@ -249,19 +294,6 @@
                     const vertexA = this.vertices[indexA]
                     const vertexB = this.vertices[indexB]
 
-                    const existingSame = this.halfedges[vertexA.id + 'x' + vertexB.id]
-                    const existingTwin = this.halfedges[vertexB.id + 'x' + vertexA.id]
-
-                    if (existingSame && existingTwin) {
-                        console.log('everything')
-                    } else if (existingSame && !existingTwin) {
-                        console.log('same')
-                    } else if (existingTwin && !existingSame) {
-                        console.log('twin')
-                    } else {
-                        console.log('nothing')
-                    }
-
                     const halfedge = new Halfedge()
                     halfedge.id = this.halfedgeCount + i
 
@@ -271,7 +303,7 @@
                         vertexA.halfedge = halfedge
                     }
 
-                    const twin = this.halfedges[vertexB.id + 'x' + vertexA.id]
+                    const twin = this.halfedges[this.Hash(vertexB, vertexA)]
 
                     if (twin) {
                         halfedge.twin = twin
@@ -286,7 +318,7 @@
                     const halfedgeA = halfedges[i]
                     const halfedgeB = halfedges[(i + 1) % halfedges.length]
 
-                    this.halfedges[halfedgeA.vertex.id + 'x' + halfedgeB.vertex.id] = halfedgeA
+                    this.halfedges[this.Hash(halfedgeA.vertex, halfedgeB.vertex)] = halfedgeA
 
                     halfedgeA.next = halfedgeB
                     halfedgeB.prev = halfedgeA
@@ -327,22 +359,22 @@
         const camera = new Camera()
         let mesh = new Mesh()
 
-        // const v0 = mesh.AddVertex(new Vec2(-100, 200))
-        // const v1 = mesh.AddVertex(new Vec2(100, 200))
-        // const v2 = mesh.AddVertex(new Vec2(-200, 0))
-        // const v3 = mesh.AddVertex(new Vec2(0, 0))
-        // const v4 = mesh.AddVertex(new Vec2(200, 0))
-        // const v5 = mesh.AddVertex(new Vec2(-100, -200))
-        // const v6 = mesh.AddVertex(new Vec2(100, -200))
+        const v0 = mesh.AddVertex(new Vec2(-100, 200))
+        const v1 = mesh.AddVertex(new Vec2(100, 200))
+        const v2 = mesh.AddVertex(new Vec2(-200, 0))
+        const v3 = mesh.AddVertex(new Vec2(0, 0))
+        const v4 = mesh.AddVertex(new Vec2(200, 0))
+        const v5 = mesh.AddVertex(new Vec2(-100, -200))
+        const v6 = mesh.AddVertex(new Vec2(100, -200))
 
-        // const halfedges = [
-        //     mesh.AddFace([0, 2, 3]),
-        //     mesh.AddFace([0, 3, 1]),
-        //     mesh.AddFace([1, 3, 4]),
-        //     mesh.AddFace([2, 5, 3]),
-        //     mesh.AddFace([3, 5, 6]),
-        //     mesh.AddFace([3, 6, 4])
-        // ]
+        const halfedges = [
+            mesh.AddFace([0, 2, 3]),
+            mesh.AddFace([0, 3, 1]),
+            mesh.AddFace([1, 3, 4]),
+            mesh.AddFace([2, 5, 3]),
+            mesh.AddFace([3, 5, 6]),
+            mesh.AddFace([3, 6, 4])
+        ]
 
         // const v0 = mesh.AddVertex(new Vec2(-200, 200))
         // const v1 = mesh.AddVertex(new Vec2(200, 200))
@@ -374,16 +406,14 @@
         //     mesh.AddFace([1, 5, 7]),
         // ]
 
-        const v0 = mesh.AddVertex(new Vec2(-200, 200))
-        const v1 = mesh.AddVertex(new Vec2(200, 200))
-        const v2 = mesh.AddVertex(new Vec2(-200, -200))
-        const v3 = mesh.AddVertex(new Vec2(200, -200))
+        // const v0 = mesh.AddVertex(new Vec2(-200, 200))
+        // const v1 = mesh.AddVertex(new Vec2(200, 200))
+        // const v2 = mesh.AddVertex(new Vec2(-200, -200))
+        // const v3 = mesh.AddVertex(new Vec2(200, -200))
 
-        const halfedges = [
-            mesh.AddFace([0, 2, 3, 1])
-        ]
-
-        // console.log(mesh.halfedgeCount)
+        // const halfedges = [
+        //     mesh.AddFace([0, 2, 3, 1])
+        // ]
 
         let mouse = new Vec2()
         let selectedVertex = null
@@ -418,7 +448,6 @@
             if (e.code == 'KeyF') {
                 mesh.AddFace(selectedVertices)
                 selectedVertices = []
-                // console.log(mesh.halfedgeCount)
             }
 
             if (e.code == 'KeyC') {
