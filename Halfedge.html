@@ -281,7 +281,7 @@
                     const existingHalfedgeA = this.halfedges[this.Hash(vertexA, vertexB)]
                     const existingHalfedgeB = this.halfedges[this.Hash(vertexB, vertexA)]
 
-                    if (existingHalfedgeA) {
+                    if (existingHalfedgeA && existingHalfedgeA.face) {
                         console.log(`Duplicate halfedge: ${ existingHalfedgeA.id }`)
 
                         return null
@@ -301,41 +301,88 @@
                 const halfedges = []
                 const face = new Face()
 
-                for (let i = 0; i < indices.length; ++i) {
-                    const indexA = indices[i]
-                    const indexB = indices[(i + 1) % indices.length]
-                    const vertexA = this.vertices[indexA]
-                    const vertexB = this.vertices[indexB]
+                for (let i = 0; i < vertices.length; ++i) {
+                    const vertexA = vertices[i]
+                    const vertexB = vertices[(i + 1) % vertices.length]
+                    let halfedge = this.GetHalfedge(vertexA, vertexB)
 
-                    const halfedge = new Halfedge()
-                    halfedge.id = this.halfedgeCount + i
-                    halfedge.face = face
+                    if (!halfedge) {
+                        halfedge = new Halfedge()
+                        halfedge.name = this.Hash(vertexA, vertexB)
+                        halfedge.vertex = vertexA
+                        halfedge.face = face
 
-                    halfedge.vertex = vertexA
-
-                    if (!vertexA.halfedge) {
-                        vertexA.halfedge = halfedge
+                        if (!vertexA.halfedge) {
+                            vertexA.halfedge = halfedge
+                        }
+                    } else {
+                        halfedge.face = face
                     }
 
-                    const twin = this.halfedges[this.Hash(vertexB, vertexA)]
+                    if (!halfedge.twin) {
+                        const halfedgeTwin = new Halfedge()
+                        halfedgeTwin.name = this.Hash(vertexB, vertexA)
+                        halfedgeTwin.vertex = vertexB
 
-                    if (twin) {
-                        halfedge.twin = twin
-                        twin.twin = halfedge
+                        if (!vertexB.halfedge) {
+                            vertexB.halfedge = halfedgeTwin
+                        }
+
+                        halfedge.twin = halfedgeTwin
+                        halfedgeTwin.twin = halfedge
                     }
 
                     halfedges.push(halfedge)
-                    this.halfedgeCount++;
+                }
+
+                for (let i = 0; i < halfedges.length; ++i) {
+                    const halfedgePrev = halfedges[(i - 1 + halfedges.length) % halfedges.length]
+                    const halfedge = halfedges[i]
+                    const halfedgeNext = halfedges[(i + 1) % halfedges.length]
+
+                    if (halfedge.prev && !halfedge?.prev?.face) {
+                        let a = halfedge.prev
+                        let b = halfedgePrev.twin
+                        a.next = b
+                        b.prev = a
+                    }
+
+                    if (halfedge.next && !halfedge?.next?.face) {
+                        let a = halfedgeNext.twin
+                        let b = halfedge.next
+                        a.next = b
+                        b.prev = a
+                    }
                 }
 
                 for (let i = 0; i < halfedges.length; ++i) {
                     const halfedgeA = halfedges[i]
                     const halfedgeB = halfedges[(i + 1) % halfedges.length]
 
-                    this.halfedges[this.Hash(halfedgeA.vertex, halfedgeB.vertex)] = halfedgeA
-
                     halfedgeA.next = halfedgeB
                     halfedgeB.prev = halfedgeA
+
+                    if (!halfedgeA.twin.prev && !halfedgeB.twin.next) {
+                         halfedgeA.twin.prev = halfedgeB.twin
+                         halfedgeB.twin.next = halfedgeA.twin
+                    }
+                }
+
+                for (let i = 0; i < halfedges.length; ++i) {
+                    const halfedgeA = halfedges[i]
+                    const halfedgeB = halfedges[(i + 1) % halfedges.length]
+
+                    if (halfedgeA.id == null) {
+                        halfedgeA.id = this.halfedgeCount
+                        this.halfedgeCount++
+                        this.halfedges[this.Hash(halfedgeA.vertex, halfedgeB.vertex)] = halfedgeA
+                    }
+
+                    if (halfedgeA.twin.id == null) {
+                        halfedgeA.twin.id = this.halfedgeCount
+                        this.halfedgeCount++
+                        this.halfedges[this.Hash(halfedgeB.vertex, halfedgeA.vertex)] = halfedgeA.twin
+                    }
                 }
 
                 face.halfedge = halfedges[0]
@@ -430,6 +477,14 @@
 
         // const halfedges = [
         //     mesh.AddFace([0, 2, 3, 1])
+        // ]
+
+        // const v0 = mesh.AddVertex(new Vec2(0, 200))
+        // const v1 = mesh.AddVertex(new Vec2(-200, -200))
+        // const v2 = mesh.AddVertex(new Vec2(200, -200))
+
+        // const halfedges = [
+        //     mesh.AddFace([0, 1, 2])
         // ]
 
         let mouse = new Vec2()
@@ -550,6 +605,7 @@
 
             for (const face of mesh.faces) {
                 let he = face.halfedge
+                let counter = 0
 
                 do {
                     const p0 = he.vertex.position
@@ -564,13 +620,17 @@
                     renderer.Stroke(c, 2)
                     renderer.FillText(he.id, p0.Add(p1).DivScalar(2).Sub(pn2), c)
 
-                    if (!he.twin) {
+                    if (he.twin && !he.twin.face) {
+                        const isActive = he.twin == activeHalfedge
+                        const c = isActive ? Rgb(252, 186, 3) : Rgb(184, 17, 81)
                         renderer.RenderArrow(p1.Sub(dn).Add(pn), p0.Add(dn).Add(pn))
-                        renderer.Stroke(Rgb(184, 17, 81), 2)
+                        renderer.Stroke(c, 2)
+                        renderer.FillText(he.twin.id, p0.Add(p1).DivScalar(2).Add(pn2), c)
                     }
 
                     he = he.next
-                } while (he && he != face.halfedge)
+                    counter++
+                } while (he && he != face.halfedge && counter < 20)
             }
 
             requestAnimationFrame(Render)
@@ -590,7 +650,7 @@
             if (activeHalfedge && mode == 3) {
                 activeHalfedge = activeHalfedge.twin.next
             }
-        }, 1000)
+        }, 200)
 
     </script>
 </body>
