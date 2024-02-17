@@ -211,6 +211,7 @@
             twin = null
             next = null
             prev = null
+            face = null
         }
 
         class Edge {
@@ -248,6 +249,7 @@
                 }
 
                 const vertices = []
+                let hasConnectedVertex = false
 
                 for (const index of indices) {
                     const vertex = this.vertices[index]
@@ -264,8 +266,14 @@
                         return null
                     }
 
+                    if (vertex.halfedge) {
+                        hasConnectedVertex = true
+                    }
+
                     vertices.push(vertex)
                 }
+
+                let twinCount = 0
 
                 for (let i = 0; i < vertices.length; ++i) {
                     const vertexA = vertices[i]
@@ -273,20 +281,25 @@
                     const existingHalfedgeA = this.halfedges[this.Hash(vertexA, vertexB)]
                     const existingHalfedgeB = this.halfedges[this.Hash(vertexB, vertexA)]
 
-                    if (existingHalfedgeA && !existingHalfedgeA.isOutside) {
+                    if (existingHalfedgeA) {
                         console.log(`Duplicate halfedge: ${ existingHalfedgeA.id }`)
 
                         return null
                     }
 
-                    if (existingHalfedgeB && existingHalfedgeB.isOutside) {
-                        console.log(`Duplicate halfedge: ${ existingHalfedgeB.id }`)
-
-                        return null
+                    if (existingHalfedgeB) {
+                        twinCount++
                     }
                 }
 
+                if (hasConnectedVertex && !twinCount) {
+                    console.log('Not allowed to connect to corner')
+
+                    return null
+                }
+
                 const halfedges = []
+                const face = new Face()
 
                 for (let i = 0; i < indices.length; ++i) {
                     const indexA = indices[i]
@@ -296,6 +309,7 @@
 
                     const halfedge = new Halfedge()
                     halfedge.id = this.halfedgeCount + i
+                    halfedge.face = face
 
                     halfedge.vertex = vertexA
 
@@ -324,11 +338,14 @@
                     halfedgeB.prev = halfedgeA
                 }
 
-                const face = new Face()
                 face.halfedge = halfedges[0]
                 this.faces.push(face)
 
                 return face
+            }
+
+            GetHalfedge(vertexA, vertexB) {
+                return this.halfedges[this.Hash(vertexA, vertexB)]
             }
 
             Debug(halfedge) {
@@ -419,6 +436,8 @@
         let selectedVertex = null
         let selectedVertices = []
         let isMoving = false
+        let activeHalfedge = null
+        let mode = null
 
         window.addEventListener('mousemove', e => {
             mouse = renderer.ToWorldSpace(new Vec2(e.clientX, e.clientY))
@@ -452,6 +471,38 @@
 
             if (e.code == 'KeyC') {
                 mesh = new Mesh()
+            }
+
+            if (e.code == 'KeyT' && selectedVertices.length == 2) {
+                const vertexA = selectedVertices[0]
+                const vertexB = selectedVertices[1]
+                const halfedge = mesh.halfedges[vertexA + '-' + vertexB]
+
+                if (halfedge) {
+                    activeHalfedge = halfedge
+                    selectedVertices = []
+                    mode = 1
+                }
+            }
+
+            if (e.code == 'KeyY' && selectedVertices.length == 1) {
+                const vertex = mesh.vertices[selectedVertices[0]]
+
+                if (vertex.halfedge) {
+                    activeHalfedge = vertex.halfedge
+                    selectedVertices = []
+                    mode = 2
+                }
+            }
+
+            if (e.code == 'KeyU' && selectedVertices.length == 1) {
+                const vertex = mesh.vertices[selectedVertices[0]]
+
+                if (vertex.halfedge) {
+                    activeHalfedge = vertex.halfedge
+                    selectedVertices = []
+                    mode = 3
+                }
             }
         })
 
@@ -506,10 +557,12 @@
                     const dn = DirectionNormal(p0, p1).MultScalar(20)
                     const pn = PerpendicularNormal(p0, p1).MultScalar(3)
                     const pn2 = PerpendicularNormal(p0, p1).MultScalar(20)
+                    const isActive = he == activeHalfedge
+                    const c = isActive ? Rgb(102, 255, 214) : Rgb(66, 135, 245)
 
                     renderer.RenderArrow(p0.Add(dn).Sub(pn), p1.Sub(dn).Sub(pn))
-                    renderer.Stroke(Rgb(66, 135, 245), 2)
-                    renderer.FillText(he.id, p0.Add(p1).DivScalar(2).Sub(pn2), Rgb(66, 135, 256))
+                    renderer.Stroke(c, 2)
+                    renderer.FillText(he.id, p0.Add(p1).DivScalar(2).Sub(pn2), c)
 
                     if (!he.twin) {
                         renderer.RenderArrow(p1.Sub(dn).Add(pn), p0.Add(dn).Add(pn))
@@ -524,6 +577,20 @@
         }
 
         Render()
+
+        window.setInterval(() => {
+            if (activeHalfedge && mode == 1) {
+                activeHalfedge = activeHalfedge.next
+            }
+
+            if (activeHalfedge && mode == 2) {
+                activeHalfedge = activeHalfedge.prev.twin
+            }
+
+            if (activeHalfedge && mode == 3) {
+                activeHalfedge = activeHalfedge.twin.next
+            }
+        }, 1000)
 
     </script>
 </body>
