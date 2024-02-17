@@ -315,11 +315,7 @@
                         if (!vertexA.halfedge) {
                             vertexA.halfedge = halfedge
                         }
-                    } else {
-                        halfedge.face = face
-                    }
 
-                    if (!halfedge.twin) {
                         const halfedgeTwin = new Halfedge()
                         halfedgeTwin.name = this.Hash(vertexB, vertexA)
                         halfedgeTwin.vertex = vertexB
@@ -330,6 +326,8 @@
 
                         halfedge.twin = halfedgeTwin
                         halfedgeTwin.twin = halfedge
+                    } else {
+                        halfedge.face = face
                     }
 
                     halfedges.push(halfedge)
@@ -341,15 +339,15 @@
                     const halfedgeNext = halfedges[(i + 1) % halfedges.length]
 
                     if (halfedge.prev && !halfedge?.prev?.face) {
-                        let a = halfedge.prev
-                        let b = halfedgePrev.twin
+                        const a = halfedge.prev
+                        const b = halfedgePrev.twin
                         a.next = b
                         b.prev = a
                     }
 
                     if (halfedge.next && !halfedge?.next?.face) {
-                        let a = halfedgeNext.twin
-                        let b = halfedge.next
+                        const a = halfedgeNext.twin
+                        const b = halfedge.next
                         a.next = b
                         b.prev = a
                     }
